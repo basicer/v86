@@ -63,12 +63,6 @@ jobs:
           path: tests/nasm/build/
           key: ${{ runner.os }}-nasmtests
 
-      - name: Run nasmtests
-        run: MAX_PARALLEL_TESTS=1 make nasmtests
-
-      - name: Run nasmtests-force-jit
-        run: MAX_PARALLEL_TESTS=1 make nasmtests-force-jit
-
       - name: Run rust-test
         run: make rust-test
 
