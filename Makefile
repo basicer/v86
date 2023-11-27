@@ -277,6 +277,7 @@ jitpagingtests: all-debug
 
 qemutests: all-debug
 	$(MAKE) -C tests/qemu test-i386
+	file test-i386
 	./tests/qemu/run.js > build/qemu-test-result
 	./tests/qemu/run-qemu.js > build/qemu-test-reference
 	diff build/qemu-test-result build/qemu-test-reference
