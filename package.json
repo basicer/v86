@@ -1,0 +1,20 @@
+{
+  "name": "v86",
+  "private": true,
+  "description": "x86 PC emulator and x86-to-wasm JIT, running in the browser",
+  "main": "build/libv86.js",
+  "scripts": {
+    "prepare": "make all all-debug",
+    "test": "make tests",
+    "lint": "make eslint"
+  },
+  "author": "Fabian Hemmer <copy@copy.sh>",
+  "license": "BSD-2-Clause",
+  "devDependencies": {
+    "eslint": "^9.7.0"
+  },
+  "files": [
+    "build/*.wasm",
+    "build/*.js"
+  ]
+}
