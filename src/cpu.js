@@ -32,6 +32,7 @@ import { IDEController } from "./ide.js";
 import { VirtioNet } from "./virtio_net.js";
 import { VGAScreen } from "./vga.js";
 import { VirtioBalloon } from "./virtio_balloon.js";
+import { VirtioVSock } from "./virtio_vsock.js";
 import { Virtio9p, Virtio9pHandler, Virtio9pProxy } from "../lib/9p.js";
 import { VirtioNodeFSHandler } from "../lib/nodefs_9p.js";
 
@@ -568,6 +569,7 @@ CPU.prototype.get_state = function()
     state[87] = this.fpu_status_word;
     state[88] = this.mxcsr;
     state[89] = this.devices.vmware;
+    state[90] = this.devices.virtio_vsock;
 
     return state;
 };
@@ -736,6 +738,7 @@ CPU.prototype.set_state = function(state)
     this.devices.virtio_net && this.devices.virtio_net.set_state(state[83]);
     this.devices.virtio_balloon && this.devices.virtio_balloon.set_state(state[84]);
     this.devices.vmware && state[89] && this.devices.vmware.set_state(state[89]);
+    this.devices.virtio_vsock && this.devices.virtio_vsock.set_state(state[90]);
 
     this.fw_value = state[62];
 
@@ -1242,6 +1245,7 @@ CPU.prototype.init = function(settings, device_bus)
         {
             this.devices.virtio_balloon = new VirtioBalloon(this, device_bus);
         }
+        this.devices.virtio_vsock = new VirtioVSock(this, device_bus);
 
         if(true)
         {
