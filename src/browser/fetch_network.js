@@ -39,6 +39,14 @@ export function FetchNetworkAdapter(bus, config)
     this.eth_encoder_buf = create_eth_encoder_buf();
     this.fetch = (...args) => fetch(...args);
 
+    if(globalThis["mitmjs"]) {
+        globalThis["mitmjs"]().then(x => {
+            this.tls = new x["MITM"]();
+            this.tls["generateECCPrivateKey"]();
+        });
+    }
+
+
     // Ex: 'https://corsproxy.io/?'
     this.cors_proxy = config.cors_proxy;
 
@@ -62,6 +70,16 @@ FetchNetworkAdapter.prototype.on_tcp_connection = function(packet, tuple)
         conn.state = TCP_STATE_SYN_RECEIVED;
         conn.net = this;
         conn.on("data", on_data_http);
+        conn.tuple = tuple;
+        conn.accept(packet);
+        this.tcp_conn[tuple] = conn;
+        return true;
+    }
+    if(packet.tcp.dport === 443 && this.tls) {
+        let conn = new TCPConnection();
+        conn.state = TCP_STATE_SYN_RECEIVED;
+        conn.net = this;
+        conn.on("data", on_data_tls.bind(conn, {net: this}));
         conn.tuple = tuple;
         conn.accept(packet);
         this.tcp_conn[tuple] = conn;
@@ -107,6 +125,9 @@ async function on_data_http(data)
             // fix "Mixed Content" errors
             target.protocol = "https:";
         }
+        else if(this.tls) {
+            target.protocol = "https:";
+        }
 
         let req_headers = new Headers();
         for(let i = 1; i < headers.length; ++i) {
@@ -133,7 +154,8 @@ async function on_data_http(data)
         const fetch_url = this.net.cors_proxy ? this.net.cors_proxy + encodeURIComponent(target.href) : target.href;
         const encoder = new TextEncoder();
         let response_started = false;
-        this.net.fetch(fetch_url, opts).then((resp) => {
+
+        let handler = (resp) => {
             const header_lines = [
                 `HTTP/1.1 ${resp.status} ${resp.statusText}`,
                 `x-was-fetch-redirected: ${!!resp.redirected}`,
@@ -168,7 +190,13 @@ async function on_data_http(data)
                     this.close();
                 });
             }
-        })
+        };
+
+        if(this.net.tls && /^https?:[/][/]mitm[.]it[/](ca|cert)[/.]pem/.test(target.href)) {
+            return handler(new Response(this.net.tls["getCACertificate"]()));
+        }
+
+        this.net.fetch(fetch_url, opts).then(handler)
         .catch((e) => {
             console.warn("Fetch Failed: " + fetch_url + "\n" + e);
             if(!response_started) {
@@ -184,6 +212,36 @@ async function on_data_http(data)
             this.close();
         });
     }
+}
+
+
+async function on_data_tls(ctx, data)
+{
+    let packet = this;
+    if(!ctx.tls) {
+        ctx.tls = packet.net.tls["ssl"]();
+        ctx.write = d => {
+            let r = ctx.tls["write"](d);
+        };
+        ctx.writev = v => {
+            for(const data of v) {
+                let r = ctx.tls["write"](data);
+            }
+        };
+        ctx.close = () => {
+            ctx.tls.close();
+            setTimeout(()=> packet.close(), 100);
+        };
+
+        ctx.tls["setWriteCallback"](d => {
+            let r = packet.write(d);
+        });
+
+        ctx.tls["setDataCallback"](d => {
+            on_data_http.call(ctx, d);
+        });
+    }
+    ctx.tls.send(data);
 }
 
 FetchNetworkAdapter.prototype.fetch = async function(url, options)
