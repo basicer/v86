@@ -32,6 +32,7 @@ import { IDEDevice } from "./ide.js";
 import { VirtioNet } from "./virtio_net.js";
 import { VGAScreen } from "./vga.js";
 import { VirtioBalloon } from "./virtio_balloon.js";
+import { VirtioVSock } from "./virtio_vsock.js";
 import { Virtio9p } from "../lib/9p.js";
 
 import { load_kernel } from "./kernel.js";

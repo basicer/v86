@@ -1,5 +1,14 @@
 "use strict";
 
+import { LOG_PCI } from "./const.js";
+import { dbg_log } from "./log.js";
+import { VirtIO, VIRTIO_F_VERSION_1 } from "./virtio.js";
+import { marshall } from "../lib/marshall.js";
+
+// For Types Only
+import { CPU } from "./cpu.js";
+import { BusConnector } from "./bus.js";
+
 // https://docs.oasis-open.org/virtio/virtio/v1.2/csd01/virtio-v1.2-csd01.html#x1-2900003
 
 /**
@@ -7,7 +16,7 @@
  * @param {CPU} cpu
  * @param {BusConnector} bus
  */
-function VirtioVSock(cpu, bus)
+export function VirtioVSock(cpu, bus)
 {
     /** @const @type {BusConnector} */
     this.bus = bus;
