@@ -266,6 +266,21 @@ if(isMainThread)
                 assert(/Received 3000 bytes/.test(capture), "server received full 3000 byte body");
             },
         },
+/*
+        {
+            name: "Fetch MITM cert",
+            start: () =>
+            {
+                emulator.serial0_send("curl http://mitm.it/cert.pem\n");
+                emulator.serial0_send("echo -e done\\\\tmitm cert\n");
+            },
+            end_trigger: "done\tmitm cert",
+            end: (capture) =>
+            {
+                assert(/BEGIN CERTIFICATE/.test(capture), "BEGIN CERTIFICATE");
+            },
+        },
+*/
     ];
 
 

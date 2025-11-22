@@ -47,6 +47,10 @@ export function FetchNetworkAdapter(bus, config)
     this.vm_mac = new Uint8Array(6);
     this.dns_method = config.dns_method || "static";
     this.doh_server = config.doh_server;
+    this.tls_ca_cert = config.tls_ca_cert;
+    this.tls_private_key = config.tls_private_key;
+    this.tls_public_key = config.tls_public_key;
+
     this.tcp_conn = {};
     this.mtu = config.mtu;
     this.eth_encoder_buf = create_eth_encoder_buf(this.mtu);
@@ -54,6 +58,25 @@ export function FetchNetworkAdapter(bus, config)
 
     // Ex: 'https://corsproxy.io/?'
     this.cors_proxy = config.cors_proxy;
+
+    this.bus.register("emulator-started", () => {
+        if(globalThis["TLS"]) {
+            globalThis["TLS"]().then(mod => {
+                this.tls = new mod["MITM"]();
+                if(!this.tls_private_key) {
+                    this.tls["generateECCPrivateKey"]();
+                    this.tls_private_key = this.tls["getPrivateKey"]();
+                    this.tls_ca_cert = this.tls["getCACertificate"]();
+                } else {
+                    this.tls["setPrivateKey"](this.tls_private_key);
+                    this.tls["setCACertificate"](this.tls_ca_cert);
+                }
+            });
+        } else {
+            dbg_log("No TLS library detected.", LOG_FETCH);
+        }
+    }, this);
+
 
     this.bus.register("net" + this.id + "-mac", function(mac) {
         this.vm_mac = new Uint8Array(mac.split(":").map(function(x) { return parseInt(x, 16); }));
@@ -65,6 +88,10 @@ export function FetchNetworkAdapter(bus, config)
     this.bus.register("tcp-connection", (conn) => {
         if(conn.sport === 80) {
             conn.on("data", on_data_http);
+            conn.accept();
+        }
+        if(conn.sport === 443 && this.tls) {
+            conn.on("data", on_data_tls.bind(conn, {net: this}));
             conn.accept();
         }
     }, this);
@@ -158,9 +185,13 @@ async function on_data_http(data)
     {
         target = new URL("http://host" + first_line[1]);
     }
+
     if(typeof window !== "undefined" && target.protocol === "http:" && window.location.protocol === "https:")
     {
         // fix "Mixed Content" errors
+        target.protocol = "https:";
+    }
+    else if(this.tls) {
         target.protocol = "https:";
     }
 
@@ -283,6 +314,10 @@ function dispatch_fetch(conn, fetch_url, opts)
         }
     };
 
+    if(conn.net.tls && /^https?:[/][/]mitm[.]it[/](ca|cert)[/.]pem/.test(target.href)) {
+        return handler(new Response(conn.net.tls_ca_cert));
+    }
+
     conn.net.fetch(fetch_url, opts).then(handler)
     .catch((e) => {
         console.warn("Fetch Failed: " + fetch_url + "\n" + e);
@@ -292,6 +327,36 @@ function dispatch_fetch(conn, fetch_url, opts)
         }
         conn.close();
     });
+}
+
+
+async function on_data_tls(ctx, data)
+{
+    let packet = this;
+    if(!ctx.tls) {
+        ctx.tls = packet.net.tls["ssl"]();
+        ctx.write = d => {
+            let r = ctx.tls["dataIn"](d);
+        };
+        ctx.writev = v => {
+            for(const data of v) {
+                let r = ctx.tls["dataIn"](data);
+            }
+        };
+        ctx.close = () => {
+            ctx.tls["close"]();
+            setTimeout(()=> packet.close(), 100);
+        };
+
+        ctx.tls["setPacketOutCallback"](d => {
+            let r = packet.write(d);
+        });
+
+        ctx.tls["setDataOutCallback"](d => {
+            on_data_http.call(ctx, d);
+        });
+    }
+    ctx.tls["packetIn"](data);
 }
 
 FetchNetworkAdapter.prototype.fetch = async function(url, options)

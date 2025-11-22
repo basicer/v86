@@ -6,6 +6,7 @@
 
 <script src="build/capstone-x86.min.js"></script>
 <script src="build/libwabt.cjs"></script>
+<script>import('build/mitm.js').then(tls => window.TLS = tls.default)</script>
 <script type="module" src="src/browser/main.js"></script>
 
 <link rel="stylesheet" href="v86.css">
