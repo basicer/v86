@@ -152,6 +152,8 @@ VirtioVSock.prototype.send_op = function (src_id, dst_id, src_port, dst_port, op
         1024 << 6,
         0
     ], with_header, 0);
+    console.log("VSock send op", op, src_id, dst_id, src_port, dst_port);
+    console.log(with_header);
     this.transmit(with_header);
 };
 
