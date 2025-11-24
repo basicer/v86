@@ -1,6 +1,8 @@
 import { LOG_FETCH } from "../const.js";
 import { dbg_log } from "../log.js";
 
+const WEBSOCKET_SEC_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
 import {
     create_eth_encoder_buf,
     handle_fake_networking,
@@ -227,6 +229,39 @@ async function on_data_http(data)
         }
     }
 
+    if(req_headers.get("upgrade") === "websocket") {
+        const data = new TextEncoder().encode(req_headers.get("Sec-WebSocket-Key") + WEBSOCKET_SEC_GUID);
+        const hash_bytes = new Uint8Array(await crypto.subtle.digest("SHA-1", data));
+        let binary = "";
+        for(let i = 0; i < hash_bytes.length; i++) {
+            binary += String.fromCharCode(hash_bytes[i]);
+        }
+
+        const headers = new Headers({
+            "Sec-WebSocket-Accept": globalThis.btoa(binary),
+            "upgrade": "websocket",
+            "connection": "upgrade"
+        });
+
+        target.protocol = target.protocol.replace("http", "ws");
+        this.ws = new WebSocket(target.toString());
+        this.on("close", () => this.ws.close());
+
+        this.ws.addEventListener("open", (e) => {
+            this.writev([this.net.form_response_head(101, "Switching Protocol", headers)]);
+        });
+
+        this.ws.addEventListener("message", async (e) => {
+            if(e.data instanceof Blob) {
+                write_ws_frame(this, 2,  await e.data.arrayBuffer());
+            } else {
+                write_ws_frame(this, 1, new TextEncoder().encode(e.data));
+            }
+        });
+
+        return;
+    }
+
     dbg_log("HTTP Dispatch: " + target.href, LOG_FETCH);
     this.name = target.href;
 
@@ -329,6 +364,96 @@ function dispatch_fetch(conn, fetch_url, opts)
     });
 }
 
+/**
+ * @param {Uint8Array} buf
+ * @returns {{opcode: number, data: Uint8Array}}
+ */
+function parse_websocket_frame(buf) {
+    const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+
+    const first_byte = view.getUint8(0);
+    const second_byte = view.getUint8(1);
+    const opcode = first_byte & 0x0f;
+    let offset = 2;
+
+    let payload_length = second_byte & 0x7f;
+
+    if(payload_length === 126) {
+        payload_length = view.getUint16(offset);
+        offset += 2;
+    } else if(payload_length === 127) {
+        const high = view.getUint32(offset);
+        const low  = view.getUint32(offset + 4);
+        offset += 8;
+        payload_length = high << 8 + low;
+    }
+
+    let mask = [0, 0, 0, 0];
+    if((second_byte & 0x80) !== 0) {
+        mask = new Uint8Array(buf.buffer, buf.byteOffset + offset, 4);
+        offset += 4;
+    }
+
+    let data = new Uint8Array(payload_length);
+    for(let i = 0; i < payload_length; i++) {
+        data[i] = view.getUint8(offset + i) ^ mask[i % 4];
+    }
+
+    return {
+        opcode,
+        data
+    };
+}
+
+/**
+* @this {TCPConnection}
+* @param {!ArrayBuffer} data
+*/
+async function on_data_websocket(data)
+{
+    let frame = parse_websocket_frame(new Uint8Array(data));
+
+    if(frame.opcode === 1) {
+        this.ws.send(new TextDecoder().decode(frame.data.buffer));
+    } else if(frame.opcode === 2) {
+        this.ws.send(frame.data);
+    } else if(frame.opcode === 8) {
+        this.close();
+    } else if(frame.opcode === 9) {
+        write_ws_frame(this, 10, frame.data);
+    } else if(frame.opcode === 10) {
+        // PONG
+    } else {
+        console.warn("Unknown WebSocket Opcode:", frame.opcode);
+    }
+}
+
+async function write_ws_frame(conn, opcode, payload)
+{
+    const frame = new ArrayBuffer(10);
+    const view = new DataView(frame);
+    const frame_bytes = new Uint8Array(frame);
+
+    view.setUint8(0, 0x80 | (opcode & 0x0f));
+
+    let offset = 2;
+    let second_byte = 0;
+    let payload_len = payload.length;
+
+    if(payload_len < 126) {
+        second_byte |= payload_len;
+    } else if(payload_len <= 0xffff) {
+        second_byte |= 126;
+        view.setUint16(offset, payload_len);
+        offset += 2;
+    } else {
+        second_byte |= 127;
+        view.setUint32(offset, 0); offset += 4;
+        view.setUint32(offset, payload_len >>> 0);  offset += 4;
+    }
+    view.setUint8(1, second_byte);
+    conn.writev([frame_bytes.slice(0, offset), payload]);
+}
 
 async function on_data_tls(ctx, data)
 {
