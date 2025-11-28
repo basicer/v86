@@ -33,6 +33,7 @@ import { VirtioNet } from "./virtio_net.js";
 import { VGAScreen } from "./vga.js";
 import { VirtioBalloon } from "./virtio_balloon.js";
 import { Virtio9p, Virtio9pHandler, Virtio9pProxy } from "../lib/9p.js";
+import { VirtioNodeFSHandler } from "../lib/nodefs_9p.js";
 
 import { load_kernel } from "./kernel.js";
 
@@ -1220,6 +1221,10 @@ CPU.prototype.init = function(settings, device_bus)
         if(settings.fs9p)
         {
             this.devices.virtio_9p = new Virtio9p(settings.fs9p, this, device_bus);
+        }
+        else if(settings.nodeFS_9p)
+        {
+            this.devices.virtio_9p = new VirtioNodeFSHandler(settings.nodeFS_9p, this);
         }
         else if(settings.handle9p)
         {

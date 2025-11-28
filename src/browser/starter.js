@@ -483,6 +483,9 @@ V86.prototype.continue_init = async function(emulator, options)
     {
         settings.handle9p = options.filesystem.handle9p;
     }
+    else if(options.filesystem && options.filesystem.nodeFS) {
+        settings.nodeFS_9p = options.filesystem.nodeFS;
+    }
     else if(options.filesystem && options.filesystem.proxy_url)
     {
         settings.proxy9p = options.filesystem.proxy_url;
