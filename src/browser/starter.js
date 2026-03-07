@@ -484,7 +484,7 @@ V86.prototype.continue_init = async function(emulator, options)
         settings.handle9p = options.filesystem.handle9p;
     }
     else if(options.filesystem && options.filesystem.nodeFS) {
-        settings.nodeFS_9p = options.filesystem.nodeFS;
+        settings.nodeFS_9p = this.nodeFS = options.filesystem.nodeFS;
     }
     else if(options.filesystem && options.filesystem.proxy_url)
     {
@@ -1297,6 +1297,11 @@ V86.prototype.create_file = async function(file, data)
     dbg_assert(arguments.length === 2);
     var fs = this.fs9p;
 
+    if(this.nodeFS) {
+        let fs = this.nodeFS.fs || this.nodeFS;
+        return await fs.writeFile(file, data);
+    }
+
     if(!fs)
     {
         return;
@@ -1329,6 +1334,11 @@ V86.prototype.read_file = async function(file)
 {
     dbg_assert(arguments.length === 1);
     var fs = this.fs9p;
+
+    if(this.nodeFS) {
+        let fs = this.nodeFS.fs || this.nodeFS;
+        return await fs.readFile(file);
+    }
 
     if(!fs)
     {
