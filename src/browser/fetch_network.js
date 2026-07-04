@@ -349,7 +349,7 @@ function dispatch_fetch(conn, fetch_url, opts)
         }
     };
 
-    if(conn.net.tls && /^https?:[/][/]mitm[.]it[/](ca|cert)[/.]pem/.test(target.href)) {
+    if(conn.net.tls && /^https?:[/][/]mitm[.]it[/](ca|cert)[/.]pem/.test(fetch_url)) {
         return handler(new Response(conn.net.tls_ca_cert));
     }
 
