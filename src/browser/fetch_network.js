@@ -132,6 +132,10 @@ FetchNetworkAdapter.prototype.tcp_probe = function(port)
  */
 async function on_data_http(data)
 {
+    if(this.ws) {
+        return on_data_websocket.call(this, data);
+    }
+
     // If we're buffering a partial request body, accumulate chunks until
     // Content-Length is satisfied, then fire the deferred fetch.
     if(this.pendingBody)
